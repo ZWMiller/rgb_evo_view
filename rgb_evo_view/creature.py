@@ -49,13 +49,15 @@ class Creature:
         delta = self.walker.next_delta(rng)
         self.position = world.apply_boundary(self.position + delta)
 
-    def consume(self, food: FoodResource, model: OverlapModel, gamma: float) -> float:
+    def consume(
+        self, food: FoodResource, model: OverlapModel, gamma: float, min_overlap: float = 0.0
+    ) -> float:
         """Eat a food: gain energy proportional to how well our colors match.
 
         Marks the food consumed and returns the energy gained (also added to this
         creature's running totals).
         """
-        gained = food.energy_value * energy_fraction(self.genome, food.genome, model, gamma)
+        gained = food.energy_value * energy_fraction(self.genome, food.genome, model, gamma, min_overlap)
         self.energy += gained
         self.energy_gained += gained
         self.food_eaten += 1

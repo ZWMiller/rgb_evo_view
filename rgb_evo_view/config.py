@@ -56,6 +56,7 @@ class EnergyConfig:
     overlap_model: str = "projection"  # projection | penalized_projection | cosine | histogram_min
     gamma: float = 1.0  # >1 sharpens selection
     move_cost: float = 1.0  # energy spent per tick
+    min_overlap: float = 0.0  # floor on the overlap fraction in [0,1]; baseline nutrition any food yields
 
 
 @dataclass(frozen=True)

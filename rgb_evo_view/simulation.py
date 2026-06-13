@@ -130,6 +130,7 @@ class SimulationManager:
         """
         move_cost = self.config.energy.move_cost
         gamma = self.config.energy.gamma
+        min_overlap = self.config.energy.min_overlap
         order = self.rng.permutation(len(self.world.creatures))
         for i in order:
             creature = self.world.creatures[i]
@@ -138,7 +139,7 @@ class SimulationManager:
             creature.move(self.world, self.rng)
             creature.energy -= move_cost
             for food in self.world.food_in_contact(creature):
-                creature.consume(food, self.overlap_model, gamma)
+                creature.consume(food, self.overlap_model, gamma, min_overlap)
             if creature.energy <= 0.0:
                 creature.alive = False
         self.world.food = [f for f in self.world.food if not f.consumed]

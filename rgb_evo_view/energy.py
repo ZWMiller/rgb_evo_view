@@ -122,15 +122,26 @@ def energy_fraction(
     food: RGBGenome,
     model: OverlapModel,
     gamma: float = 1.0,
+    min_overlap: float = 0.0,
 ) -> float:
     """Fraction of a food's energy a creature extracts, in ``[0, 1]``.
 
     Clamps the model's raw score into ``[0, 1]``, then (if ``gamma != 1``) raises
     it to ``gamma`` to sharpen selection -- ``gamma > 1`` means only well-matched
     creatures profit, while ``gamma == 1`` leaves the score untouched.
+
+    Finally, if ``min_overlap > 0`` the score is lifted off the floor with an
+    affine remap ``min_overlap + (1 - min_overlap) * frac``: a perfect match still
+    scores 1, a total mismatch scores ``min_overlap`` instead of 0, and every
+    creature in between keeps its ordering.  This is a baseline-nutrition knob --
+    any food becomes minimally edible -- that softens the cycle-0 die-off so
+    selection drifts the palette over many cycles instead of in one step.  It
+    overrides the "colorless food yields 0" anchor: with a floor, all food feeds.
     """
     frac = model(creature.rgb, food.rgb)
     frac = min(max(frac, 0.0), 1.0)
     if gamma != 1.0:
         frac = frac**gamma
+    if min_overlap > 0.0:
+        frac = min_overlap + (1.0 - min_overlap) * frac
     return frac

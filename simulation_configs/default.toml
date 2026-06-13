@@ -8,7 +8,9 @@
 # Copy and edit this file, then:  python runner.py my_config.toml
 
 [simulation]
-num_cycles      = 100     # how many food -> walk -> mate cycles to run
+num_cycles      = 20      # how many food -> walk -> mate cycles to run; the drift to
+                          # orchid happens over ~10 cycles, so 20 captures it plus a
+                          # settled tail without padding the GIF with static frames
 steps_per_cycle = 100     # ticks in the walk phase; each tick costs move_cost energy
 seed            = 42      # omit for a fresh random run each time
 output_dir      = "runs"  # outputs go to runs/<timestamp>/
@@ -45,6 +47,15 @@ placement    = "uniform"
 overlap_model = "penalized_projection"  # projection | penalized_projection | cosine | histogram_min
 gamma         = 1.5         # >1 sharpens selection -- here it drives the green channel down
 move_cost     = 1.0         # energy spent per tick
+# Baseline nutrition floor on the overlap fraction, in [0,1]. 0 = pure color match
+# (mismatched creatures gain ~nothing and starve in cycle 0). Raising it lets
+# poorly-matched creatures scavenge a little from any food, softening the early
+# die-off so the palette drifts gradually over many cycles instead of snapping in
+# one. The floor also weakens steady-state selection, so the population settles at
+# a lighter "orchid" purple rather than the deep purple a zero floor reaches --
+# that lighter equilibrium is the honest outcome of this gentler environment.
+# Keep it modest: too high and nobody starves and selection switches off entirely.
+min_overlap   = 0.25
 
 [mating]
 distance_space      = "position"  # position | genome
