@@ -1,0 +1,58 @@
+# RGB Evolution Visualizer -- default "drift to purple" demo.
+#
+# Creatures start as random colors; every food is pure purple (1, 0, 1).
+# Creatures must match the food's color to extract energy, so over the cycles
+# natural selection should recolor the whole population toward purple.
+#
+# Run:  python runner.py
+# Copy and edit this file, then:  python runner.py my_config.toml
+
+[simulation]
+num_cycles      = 100     # how many food -> walk -> mate cycles to run
+steps_per_cycle = 100     # ticks in the walk phase; each tick costs move_cost energy
+seed            = 42      # omit for a fresh random run each time
+output_dir      = "runs"  # outputs go to runs/<timestamp>/
+
+[world]
+width          = 100.0
+height         = 100.0
+boundary_mode  = "reflect"  # reflect | clamp | wrap
+contact_radius = 3.0        # how close a creature must be to eat a food
+
+[seed]                      # founding population (cycle 0)
+count           = 300       # a large founding pool cushions the harsh early die-off
+init_mode       = "random"  # random | all_r | all_g | all_b | fixed | uniform_split | directed
+# fixed_rgb     = [1.0, 0.0, 1.0]   # for init_mode = "fixed"
+# base_rgb      = [1.0, 0.0, 1.0]   # for init_mode = "directed"
+# noise         = 0.1
+starting_energy = 55.0      # below steps_per_cycle, so poorly matched creatures starve
+
+[locomotion]
+walk_mode = "brownian"      # brownian | inertial
+step_size = 2.0
+inertia   = 0.8             # inertial only: 0 = brownian, ->1 = straight lines
+
+[food]
+count        = 700          # plentiful food keeps the population off the extinction floor
+genome_mode  = "fixed"      # fixed | random | directed
+fixed_rgb    = [1.0, 0.0, 1.0]   # PURPLE -- the selective target
+# base_rgb   = [1.0, 0.0, 1.0]    # for genome_mode = "directed"
+# noise      = 0.15
+energy_value = 34.0         # a scalar, or a range like [15.0, 35.0]
+placement    = "uniform"
+
+[energy]
+overlap_model = "penalized_projection"  # projection | penalized_projection | cosine | histogram_min
+gamma         = 1.5         # >1 sharpens selection -- here it drives the green channel down
+move_cost     = 1.0         # energy spent per tick
+
+[mating]
+distance_space      = "position"  # position | genome
+# offspring_per_pair = 2 with parents_survive = true keeps the population healthy.
+# Pure non-overlapping generations (parents_survive = false) cannot sustain any
+# mortality at 2 offspring/pair and ratchet to extinction -- raise offspring_per_pair
+# to >= 3 if you want non-overlapping generations instead.
+offspring_per_pair  = 2
+parents_survive     = true        # overlapping generations: survivors carry into the next cycle
+mutation_sigma      = 0.02        # per-channel gaussian noise on offspring; 0 = pure average
+offspring_placement = "midpoint"  # midpoint | random

@@ -1,34 +1,65 @@
 # rgb_evo_view
 
-_TODO: project description._
+A teaching-oriented visualizer for natural selection, where **a creature's color
+is its genome**. Each creature is a dot whose genetics are its RGB value, so you
+watch evolution happen directly: a screen of randomly-colored dots is reshaped,
+cycle by cycle, into whatever color the environment rewards.
+
+Each cycle has three phases:
+
+1. **Food** — colored food resources are scattered across the world (static).
+2. **Walk** — creatures wander for a fixed number of ticks, spending one energy
+   per tick. Bumping into food yields energy *proportional to how well the
+   creature's color matches the food's color*. Run out of energy and you die.
+3. **Mate** — the survivors pair with their nearest neighbor and produce
+   offspring whose color is the average of the parents'.
+
+The bundled demo seeds **random** creatures against **purple `(1,0,1)`** food, so
+selection recolors the population toward purple over 100 cycles.
+
+See [`implementation_plan.md`](implementation_plan.md) for the full design,
+including the four energy-overlap models and the population-dynamics trade-offs.
 
 ---
 
 ## Installation
 
 ```bash
-# Install dependencies (requires Python 3.13+)
-poetry install
-
-# Install the pre-commit hooks
-poetry run pre-commit install
+poetry install                 # requires Python 3.13+
+poetry run pre-commit install  # optional: enable the git hooks
 ```
 
----
+## Running
+
+```bash
+poetry run python runner.py --gif out.gif   # render the run to an animated GIF
+poetry run python runner.py --headless      # no window; just write history + a stats plot
+poetry run python runner.py my_config.toml --gif out.gif --cycles 200 --seed 7
+```
+
+A run must choose a mode: `--gif` or `--headless`. A live windowed viewer is
+planned (in pygame) but not implemented yet, so a bare `python runner.py` exits
+with a pointer to those flags.
+
+Each run writes a timestamped folder under `runs/` containing a copy of the
+config, a per-cycle `history.json`, and a `history.png` summary plot.
+
+## Configuration
+
+A run is fully described by one TOML file; copy and edit
+[`simulation_configs/default.toml`](simulation_configs/default.toml), which is
+heavily commented. Key knobs: the energy-overlap `model` (how color match maps to
+energy), the locomotion `walk_mode`, the founding population, the food color/mode,
+and the mating rules.
+
+> **Tuning note:** keep `starting_energy` *below* `steps_per_cycle` — otherwise no
+> creature ever starves, selection switches off, and (with `parents_survive`) the
+> population grows without bound.
 
 ## Development
 
 ```bash
-# Run the test suite
-poetry run pytest
-
-# Run all pre-commit hooks across the repo
-poetry run pre-commit run --all-files
-
-# Regenerate API docs from docstrings (edit the module list in the script first)
-poetry run bash scripts/generate_api_docs.sh
+poetry run pytest                       # run the test suite
+poetry run ruff check . && poetry run ruff format .
+poetry run bash scripts/generate_api_docs.sh   # regenerate docs/api from docstrings
 ```
-
-Documentation lives in [`docs/`](docs/): see [`docs/TECHNICAL_DOCS.md`](docs/TECHNICAL_DOCS.md)
-for the technical reference and [`docs/DECISION_LOG.md`](docs/DECISION_LOG.md) for the history of
-design decisions.

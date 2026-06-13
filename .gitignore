@@ -1,3 +1,6 @@
+# Simulation output -- per-run folders are not committed
+runs/
+
 # Python
 __pycache__/
 *.pyc
