@@ -19,12 +19,10 @@ sibling of ``runs/``), so rebuilt animations live apart from the run logs.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
-from rgb_evo_view.config import load_config
-from rgb_evo_view.recording import load_frames
+from rgb_evo_view.run_loader import load_run
 
 
 def main() -> None:
@@ -53,27 +51,11 @@ def main() -> None:
     args = parser.parse_args()
 
     run_dir = Path(args.run_dir)
-    frames_path = run_dir / "frames.npz"
-    config_path = run_dir / "config.toml"
-    history_path = run_dir / "history.json"
-    if not frames_path.exists():
-        print(f"[error] No frame log found: {frames_path}", file=sys.stderr)
-        print("        Re-run the simulation (any mode) to produce one.", file=sys.stderr)
+    try:
+        run = load_run(run_dir)
+    except FileNotFoundError as exc:
+        print(f"[error] {exc}", file=sys.stderr)
         sys.exit(1)
-
-    frames = load_frames(frames_path)
-    history = json.loads(history_path.read_text()) if history_path.exists() else []
-
-    # World size comes from the run's config (it is never CLI-overridable, so the
-    # copied config.toml is authoritative).  Cycle/step counts, however, can be
-    # overridden at run time without the copied config reflecting it, so derive
-    # them from the frames themselves -- the mate frame of each cycle carries
-    # tick == steps_per_cycle, and cycle indices are 0-based.
-    config = load_config(config_path)
-    world_size = (config.world.width, config.world.height)
-    num_cycles = max((f.cycle for f in frames), default=0) + 1
-    mate_ticks = [f.tick for f in frames if f.phase == "mate"]
-    steps_per_cycle = max(mate_ticks) if mate_ticks else max((f.tick for f in frames), default=0) + 1
 
     if args.gif is not None:
         save_path = Path(args.gif)
@@ -85,19 +67,19 @@ def main() -> None:
     from visualizer.animate import animate
 
     animate(
-        frames,
-        history,
+        run.frames,
+        run.history,
         save_path=save_path,
-        world_size=world_size,
-        steps_per_cycle=steps_per_cycle,
-        num_cycles=num_cycles,
+        world_size=run.world_size,
+        steps_per_cycle=run.steps_per_cycle,
+        num_cycles=run.num_cycles,
         fps=args.fps,
         max_frames=args.max_frames,
         cycle_end_seconds=args.cycle_end_seconds,
         mate_seconds=args.mate_seconds,
         final_chart_seconds=args.final_chart_seconds,
     )
-    print(f"[done] rebuilt {len(frames)} frames -> {save_path}")
+    print(f"[done] rebuilt {len(run.frames)} frames -> {save_path}")
 
 
 if __name__ == "__main__":
