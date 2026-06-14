@@ -22,16 +22,28 @@ from __future__ import annotations
 import argparse
 
 import plotly.graph_objects as go
-from dash import Dash, dcc, html
+from dash import Dash, Input, Output, State, dcc, html
 
 from rgb_evo_view.run_loader import LoadedRun, load_run
 from rgb_evo_view.simulation import Frame
-from visualizer.interactive_model import colors_to_hex
+from visualizer.interactive_model import build_frame_index, colors_to_hex
 
 # Dark field to match the GIF renderer; markers carry the only real color.
 _FIELD_BG = "#0d0d12"
+_PANEL_BG = "#15151c"
 _FONT = "#e6e6ea"
 _MUTED = "#9a9aa2"
+
+# Playback speeds: label -> (Interval period in ms, frames advanced per tick).
+# Slow speeds lengthen the period; fast speeds stride over frames at a fixed,
+# smooth period so we don't fire callbacks faster than the browser can redraw.
+_SPEEDS = {
+    "0.5×": {"period": 130, "stride": 1},
+    "1×": {"period": 65, "stride": 1},
+    "2×": {"period": 65, "stride": 2},
+    "4×": {"period": 65, "stride": 4},
+}
+_DEFAULT_SPEED = "1×"
 
 
 def _frame_title(frame: Frame) -> str:
@@ -126,15 +138,90 @@ def _legend_bar() -> html.Div:
     )
 
 
+def _slider_row(label: str, slider: dcc.Slider) -> html.Div:
+    return html.Div(
+        style={"display": "flex", "alignItems": "center", "gap": "10px", "margin": "2px 0"},
+        children=[
+            html.Span(label, style={"width": "48px", "color": _MUTED, "fontSize": "12px"}),
+            html.Div(slider, style={"flex": "1 1 auto"}),
+        ],
+    )
+
+
+def _controls(run: LoadedRun) -> html.Div:
+    """The bottom control bar: Play, speed, and the two scrub sliders."""
+    last_cycle = max(run.num_cycles - 1, 0)
+    last_tick = run.steps_per_cycle
+    tooltip = {"placement": "bottom", "always_visible": False}
+    return html.Div(
+        style={
+            "flex": "0 0 auto",
+            "padding": "8px 16px",
+            "backgroundColor": _PANEL_BG,
+            "borderTop": "1px solid #22222a",
+        },
+        children=[
+            # Interval drives playback; starts disabled (paused).
+            dcc.Interval(
+                id="tick-timer",
+                interval=_SPEEDS[_DEFAULT_SPEED]["period"],
+                disabled=True,
+            ),
+            html.Div(
+                style={"display": "flex", "alignItems": "center", "gap": "14px", "marginBottom": "4px"},
+                children=[
+                    html.Button("▶ Play", id="play", n_clicks=0, style={"minWidth": "84px"}),
+                    html.Span("Speed", style={"color": _MUTED, "fontSize": "12px"}),
+                    dcc.Dropdown(
+                        id="speed",
+                        options=[{"label": k, "value": k} for k in _SPEEDS],
+                        value=_DEFAULT_SPEED,
+                        clearable=False,
+                        style={"width": "90px", "color": "#111"},
+                    ),
+                ],
+            ),
+            _slider_row(
+                "cycle",
+                dcc.Slider(
+                    id="cycle-slider",
+                    min=0,
+                    max=last_cycle,
+                    step=1,
+                    value=0,
+                    marks={0: "0", last_cycle: str(last_cycle)},
+                    tooltip=tooltip,
+                ),
+            ),
+            _slider_row(
+                "tick",
+                dcc.Slider(
+                    id="tick-slider",
+                    min=0,
+                    max=last_tick,
+                    step=1,
+                    value=0,
+                    marks={0: "0", last_tick: "mate"},
+                    tooltip=tooltip,
+                ),
+            ),
+        ],
+    )
+
+
 def make_app(run: LoadedRun) -> Dash:
     """Build the Dash app for a loaded run.
 
-    Step 4: a static, responsive world scatter of the first frame.  Scrub
-    sliders, playback, the summary tab, and the flower garden are layered on in
-    later steps.
+    The two sliders (cycle, tick) are the single source of truth for the
+    current frame.  Playback advances them on an Interval; the scatter is a
+    pure function of their values.  Keeping the render callback read-only on
+    the sliders (it only outputs the figure) avoids any feedback loop with the
+    playback callback, which writes them.
     """
     app = Dash(__name__)
-    first = run.frames[0]
+    frame_index = build_frame_index(run.frames)
+    ticks_per_cycle = run.steps_per_cycle + 1  # walk ticks 0..steps-1 plus the mate frame
+    total = len(run.frames)
 
     app.layout = html.Div(
         style={
@@ -147,13 +234,57 @@ def make_app(run: LoadedRun) -> Dash:
         children=[
             dcc.Graph(
                 id="world",
-                figure=world_figure(first, run.world_size),
+                figure=world_figure(run.frames[0], run.world_size),
                 config={"responsive": True, "displayModeBar": False},
                 style={"flex": "1 1 auto", "minHeight": 0},
             ),
+            _controls(run),
             _legend_bar(),
         ],
     )
+
+    @app.callback(
+        Output("world", "figure"),
+        Input("cycle-slider", "value"),
+        Input("tick-slider", "value"),
+    )
+    def _render(cycle: int, tick: int) -> go.Figure:
+        idx = frame_index.index_of(int(cycle), int(tick))
+        return world_figure(run.frames[idx], run.world_size)
+
+    @app.callback(
+        Output("tick-timer", "disabled"),
+        Output("play", "children"),
+        Input("play", "n_clicks"),
+        State("tick-timer", "disabled"),
+        prevent_initial_call=True,
+    )
+    def _toggle_play(_n_clicks: int, disabled: bool) -> tuple[bool, str]:
+        now_paused = not disabled
+        return now_paused, ("▶ Play" if now_paused else "⏸ Pause")
+
+    @app.callback(
+        Output("tick-timer", "interval"),
+        Input("speed", "value"),
+    )
+    def _set_speed(speed: str) -> int:
+        return _SPEEDS[speed]["period"]
+
+    @app.callback(
+        Output("cycle-slider", "value"),
+        Output("tick-slider", "value"),
+        Input("tick-timer", "n_intervals"),
+        State("cycle-slider", "value"),
+        State("tick-slider", "value"),
+        State("speed", "value"),
+        prevent_initial_call=True,
+    )
+    def _advance(_n: int, cycle: int, tick: int, speed: str) -> tuple[int, int]:
+        stride = _SPEEDS[speed]["stride"]
+        pos = (int(cycle) * ticks_per_cycle + int(tick) + stride) % total
+        new_cycle, new_tick = divmod(pos, ticks_per_cycle)
+        return new_cycle, new_tick
+
     return app
 
 
