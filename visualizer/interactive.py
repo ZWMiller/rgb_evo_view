@@ -45,6 +45,14 @@ _SPEEDS = {
 }
 _DEFAULT_SPEED = "1×"
 
+# Playback dwells on the two end-of-cycle frames, mirroring the GIF renderer's
+# holds (see visualizer/animate.py): the last walk frame -- the survivors, just
+# before they mate -- is held longest, and the mate frame -- the newborns,
+# before next cycle's food lands -- a little less.  These match the GIF's
+# cycle_end_seconds / mate_seconds defaults (2.0s / 1.0s).
+_SURVIVORS_HOLD_MS = 2000
+_MATE_HOLD_MS = 1000
+
 
 def _frame_title(frame: Frame) -> str:
     if frame.population:
@@ -219,6 +227,16 @@ def make_app(run: LoadedRun) -> Dash:
     playback callback, which writes them.
     """
     app = Dash(__name__)
+    # Kill the browser's default body margin and paint the page the field color,
+    # so there's no white band around the app.
+    app.index_string = f"""<!DOCTYPE html>
+<html>
+    <head>
+        {{%metas%}}<title>{{%title%}}</title>{{%favicon%}}{{%css%}}
+        <style>html, body {{ margin: 0; padding: 0; background: {_FIELD_BG}; }}</style>
+    </head>
+    <body>{{%app_entry%}}<footer>{{%config%}}{{%scripts%}}{{%renderer%}}</footer></body>
+</html>"""
     frame_index = build_frame_index(run.frames)
     ticks_per_cycle = run.steps_per_cycle + 1  # walk ticks 0..steps-1 plus the mate frame
     total = len(run.frames)
@@ -238,8 +256,8 @@ def make_app(run: LoadedRun) -> Dash:
                 config={"responsive": True, "displayModeBar": False},
                 style={"flex": "1 1 auto", "minHeight": 0},
             ),
-            _controls(run),
             _legend_bar(),
+            _controls(run),
         ],
     )
 
@@ -263,11 +281,21 @@ def make_app(run: LoadedRun) -> Dash:
         now_paused = not disabled
         return now_paused, ("▶ Play" if now_paused else "⏸ Pause")
 
+    last_walk_tick = run.steps_per_cycle - 1  # survivors, just before mating
+    mate_tick = run.steps_per_cycle  # newborns, before next cycle's food
+
     @app.callback(
         Output("tick-timer", "interval"),
         Input("speed", "value"),
+        Input("tick-slider", "value"),
     )
-    def _set_speed(speed: str) -> int:
+    def _interval_period(speed: str, tick: int) -> int:
+        # Hold on the two end-of-cycle frames; changing the interval restarts the
+        # countdown, so landing on them dwells before playback resumes.
+        if int(tick) == last_walk_tick:
+            return _SURVIVORS_HOLD_MS
+        if int(tick) == mate_tick:
+            return _MATE_HOLD_MS
         return _SPEEDS[speed]["period"]
 
     @app.callback(
