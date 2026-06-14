@@ -6,6 +6,36 @@ only decisions about the system itself.
 
 ---
 
+## 2026-06-14
+
+- **Default `min_overlap` floor lowered 0.25 → 0.10 now that carryover carries the run.** A
+  floor sweep (6 values × 4 seeds, 80 cycles, carryover on) showed the population *never went
+  extinct* even at a zero floor — carryover, not the floor, is what keeps the run alive. With
+  survival no longer the floor's job, it mainly governs how deep the cycle-0 bottleneck goes
+  (the die-off of random founders against purple food, always at cycle 0) versus how hard the
+  tail selects. The two pull opposite ways, so a single static floor can't both shallow the
+  trough and sharpen the tail; a decaying floor would, but that was already rejected (below) as
+  engineering the outcome. 0.10 is the tuned balance: mean distance-to-purple ≈0.22 (vs ≈0.33
+  at 0.25) and green ≈0.09 (vs ≈0.19), while the cycle-0 trough stays a safe ≈17 (from 300
+  founders) and recovers fully. Gains flatten below 0.10 while the trough keeps deepening, so
+  going lower buys little selection for more bottleneck risk.
+
+- **Surviving parents carry their leftover energy across cycles (`energy.carryover_energy`,
+  default on).** Previously every creature was reset to `starting_energy` at the start of
+  each cycle, so a parent that barely scraped through paid no lasting price — selection was
+  memoryless and reset each cycle. With carryover, a creature's energy persists: a marginal
+  survivor begins the next cycle near empty and is far likelier to starve, while a well-matched
+  one banks a buffer. Fitness compounds across cycles, so off-target pigment (the green channel
+  in the purple demo) is driven down harder *without* touching the food economy (`energy_value`,
+  `min_overlap`). Empirically, over an 80-cycle run the mean green channel fell from ≈0.35 to
+  ≈0.26 and the palette landed markedly closer to true purple, with the population staying
+  healthy (no runaway growth or collapse). Implemented as a one-line change: `_begin_cycle`
+  simply skips the energy reset when the flag is set — newborns and founders already receive
+  `starting_energy` at creation, so nothing else is needed. Only meaningful with
+  `parents_survive = true`. A decaying energy cap was considered to bound long-lived
+  "immortal" lineages but rejected as unnecessary: accumulation reflects genuine fitness in a
+  static environment, and no instability appeared in long runs.
+
 ## 2026-06-13
 
 - **Genome is an RGB triple; color *is* the genome.** Each creature (and each food

@@ -30,10 +30,12 @@ class RGBGenome:
     # ── constructors ──────────────────────────────────────────────────────────
     @classmethod
     def from_channels(cls, r: float, g: float, b: float) -> RGBGenome:
+        """A genome from three channel values (clamped into ``[0, 1]``)."""
         return cls(np.array([r, g, b], dtype=float))
 
     @classmethod
     def from_array(cls, arr) -> RGBGenome:
+        """A genome from any 3-element array-like (clamped into ``[0, 1]``)."""
         return cls(np.asarray(arr, dtype=float))
 
     @classmethod
@@ -60,5 +62,6 @@ class RGBGenome:
         return tuple(self.rgb)
 
     def to_hex(self) -> str:
+        """The color as a hash-prefixed ``rrggbb`` hex string."""
         r, g, b = (int(round(c * 255)) for c in self.rgb)
         return f"#{r:02x}{g:02x}{b:02x}"

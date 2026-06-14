@@ -8,7 +8,9 @@ Usage
 
 A run must pick a mode: --gif or --headless.  (A live windowed viewer is planned
 but not implemented yet.)  Outputs (a copy of the config, per-cycle history.json,
-and a history.png stats plot) are written to output_dir/<timestamp>/.
+a history.png stats plot, and the full frame log frames.npz) are written to
+output_dir/<timestamp>/.  The frame log lets ``build_animation.py`` rebuild the
+GIF with different animation settings without re-running the simulation.
 """
 
 from __future__ import annotations
@@ -75,12 +77,26 @@ def main() -> None:
     run_dir = manager.setup()
     print(f"[run] output -> {run_dir}")
 
-    if args.headless:
-        manager.run()
-    else:
+    # Drain the run once into memory: this advances the sim, builds history, and
+    # writes history.json.  The same frames feed both the GIF and the saved frame
+    # log, so the sim runs exactly once regardless of mode.
+    from rgb_evo_view.recording import save_frames
+
+    frames = list(manager.frames())
+    n_saved = save_frames(run_dir / "frames.npz", frames)
+    print(f"[run] saved {n_saved} frames -> {run_dir / 'frames.npz'}")
+
+    if not args.headless:
         from visualizer.animate import animate
 
-        animate(manager, save_path=args.gif)
+        animate(
+            frames,
+            manager.history,
+            save_path=args.gif,
+            world_size=(manager.world.width, manager.world.height),
+            steps_per_cycle=manager.config.steps_per_cycle,
+            num_cycles=manager.config.num_cycles,
+        )
 
     from visualizer.stats import plot_history
 
