@@ -23,11 +23,17 @@ poetry run bash scripts/generate_api_docs.sh    # regenerate docs/api from docst
 poetry run python runner.py --gif out.gif       # render run to animated GIF
 poetry run python runner.py --headless          # no window; write history + stats plot
 poetry run python runner.py my_config.toml --gif out.gif --cycles 200 --seed 7
+
+# Rebuild a GIF from a saved run (no re-simulation; tweak timing/frame budget fast):
+poetry run python build_animation.py runs/<timestamp>           # -> run_animations/<timestamp>.gif
+poetry run python build_animation.py runs/<timestamp> --fps 15 --max-frames 800
 ```
 
 A live windowed (pygame) viewer is planned but **not implemented** — that is why a run must
 choose `--gif` or `--headless`. Each run writes a timestamped folder under `runs/` containing a
-copy of the config, per-cycle `history.json`, and a `history.png` summary plot.
+copy of the config, per-cycle `history.json`, a `history.png` summary plot, and `frames.npz`
+(the full per-tick geometry — see below). `build_animation.py` replays `frames.npz` to rebuild
+the GIF without re-running the sim; rebuilt GIFs land in `run_animations/`.
 
 ## Architecture
 
@@ -41,9 +47,18 @@ The cycle is **food → walk → mate**, repeated `num_cycles` times:
 
 **`SimulationManager` (`simulation.py`) is the orchestrator and single source of truth.** Its
 `frames()` generator yields an immutable `Frame` snapshot after every tick and every mating.
-Everything else consumes that one stream: `manager.run()` drains it headlessly, and
-`visualizer/animate.py` renders the same frames to a GIF. Do not add a parallel rendering path —
-extend `Frame`/`frames()` instead.
+Everything else consumes that one stream: `manager.run()` drains it headlessly,
+`recording.save_frames` persists it to `frames.npz`, and `visualizer/animate.py` renders frames
+to a GIF. Do not add a parallel rendering path — extend `Frame`/`frames()` instead.
+
+**`animate()` takes an *iterable of frames* (plus `history` and a little geometry), not a live
+manager** — so the live run and a replay from `frames.npz` feed the identical renderer. This is
+the one-stream rule, not a second path: `runner.py` drains the sim once into a list, saves it,
+and hands that same list to `animate()`; `build_animation.py` hands `animate()` a list loaded
+from disk. `recording.py` stores the ragged per-frame arrays flat (concatenated + per-frame
+counts, no pickling) in **float16** — the GIF can't resolve finer, and it halves the file.
+Note `history.json` only holds per-cycle stats, never per-tick geometry; that's why rebuilding a
+GIF needs `frames.npz`.
 
 **`World` (`world.py`)** owns the population and current food and answers the two spatial queries
 the sim asks: "what food is this creature touching?" and "who is nearest?". It caches food
@@ -73,6 +88,12 @@ construct via its factories (`random`, `from_array`) rather than mutating.
 - **Keep `starting_energy` below `steps_per_cycle`.** Otherwise no creature starves, selection
   switches off, and (with `parents_survive`) the population grows unbounded. This is the single
   most important tuning constraint.
+- **`energy.carryover_energy` (default on) makes survivors keep their leftover energy across
+  cycles** instead of resetting to `starting_energy` every cycle — so fitness compounds and
+  off-target pigment is selected down harder. It's implemented purely by `_begin_cycle` *not*
+  resetting energy (newborns/founders already get `starting_energy` at creation), and only bites
+  with `parents_survive = true`. With it on, `starting_energy` is just the initial budget for new
+  creatures, not a per-cycle floor.
 - `mating.offspring_per_pair = 2` keeps population stable; higher grows it.
 - The current default overlap model is `penalized_projection` with `gamma = 1.5` — chosen so the
   purple-food demo converges to *true* purple rather than light orchid (off-axis green must be

@@ -30,7 +30,8 @@ class SeedConfig:
     fixed_rgb: list[float] | None = None  # for init_mode = "fixed"
     base_rgb: list[float] | None = None  # for init_mode = "directed"
     noise: float = 0.1  # directed: per-channel gaussian std
-    starting_energy: float = 60.0  # energy every creature is given at the start of each cycle
+    starting_energy: float = 60.0  # energy a creature is created with; also the per-cycle
+    # reset value unless energy.carryover_energy is set (then it is only the initial budget)
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,12 @@ class EnergyConfig:
     gamma: float = 1.0  # >1 sharpens selection
     move_cost: float = 1.0  # energy spent per tick
     min_overlap: float = 0.0  # floor on the overlap fraction in [0,1]; baseline nutrition any food yields
+    # When True, surviving parents carry their leftover energy into the next cycle
+    # instead of being reset to starting_energy. Fitness then compounds across
+    # cycles -- a marginally-fed survivor starts the next cycle near empty -- which
+    # sharpens selection without touching the food economy. Only meaningful with
+    # mating.parents_survive = True (otherwise parents do not persist).
+    carryover_energy: bool = False
 
 
 @dataclass(frozen=True)

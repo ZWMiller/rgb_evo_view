@@ -1,5 +1,6 @@
-# Simulation output -- per-run folders are not committed
+# Simulation output -- per-run folders and rebuilt animations are not committed
 runs/
+run_animations/
 
 # Python
 __pycache__/

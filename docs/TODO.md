@@ -14,6 +14,26 @@ Cross-machine task tracking for active development items.
 
 ## Done
 
+### 2026-06-14 — Energy carries over between cycles (stronger selection)
+Added `energy.carryover_energy` (default on): surviving parents keep their leftover
+energy into the next cycle instead of everyone resetting to `starting_energy`.
+Fitness compounds across cycles, so marginal survivors start near empty and the
+off-target green channel is driven down harder — reaching a deeper, truer purple
+without inflating/deflating the food economy or the `min_overlap` floor. One-line
+change in `_begin_cycle` (skip the reset; newborns/founders already get
+`starting_energy` at creation). Only bites with `parents_survive = true`. Over an
+80-cycle run mean green fell ≈0.35→0.26 with the population staying healthy.
+
+### 2026-06-14 — Rebuild animations from a run log without re-simulating
+Every run now persists the full per-tick `Frame` stream to `frames.npz` (ragged
+arrays stored flat + per-frame counts, geometry in float16 to halve the file).
+`animate()` was refactored to consume an iterable of frames + `history` + a little
+geometry instead of a live `SimulationManager`, so the live `--gif` path and a
+replay feed the identical renderer. New `build_animation.py <run_dir>` reloads
+`frames.npz`/`history.json`/`config.toml` and re-renders with adjustable timing and
+frame budget; rebuilt GIFs go to `run_animations/<run-folder-name>.gif`. Lets the
+animation builder be tweaked in seconds instead of waiting on the whole sim.
+
 ### 2026-06-13 — Slow the evolution down
 Added an `energy.min_overlap` floor (soft affine remap of the overlap fraction): any
 food is minimally edible, so poorly-matched creatures scavenge instead of starving in

@@ -51,11 +51,20 @@ move_cost     = 1.0         # energy spent per tick
 # (mismatched creatures gain ~nothing and starve in cycle 0). Raising it lets
 # poorly-matched creatures scavenge a little from any food, softening the early
 # die-off so the palette drifts gradually over many cycles instead of snapping in
-# one. The floor also weakens steady-state selection, so the population settles at
-# a lighter "orchid" purple rather than the deep purple a zero floor reaches --
-# that lighter equilibrium is the honest outcome of this gentler environment.
-# Keep it modest: too high and nobody starves and selection switches off entirely.
-min_overlap   = 0.25
+# one. With carryover_energy on (below), the floor mainly sets how deep the cycle-0
+# bottleneck goes: higher = shallower trough but weaker tail selection (lighter
+# "orchid"); lower = deeper trough but a truer, deeper purple. 0.10 is the tuned
+# balance -- a safe trough that still recovers, with strong selection in the tail.
+# Carryover keeps the run off extinction even at a zero floor, but keep this modest:
+# too high and nobody starves and selection switches off entirely.
+min_overlap   = 0.10
+# Carry surviving parents' leftover energy into the next cycle instead of resetting
+# everyone to starting_energy each cycle. Fitness then compounds: a creature that
+# only just scraped through starts the next cycle near empty and is far likelier to
+# starve, so off-target pigment (the green channel here) is driven down harder over
+# the run -- without inflating or deflating the food economy. Newborns and founders
+# still start with starting_energy. Only bites with mating.parents_survive = true.
+carryover_energy = true
 
 [mating]
 distance_space      = "position"  # position | genome

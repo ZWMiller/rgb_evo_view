@@ -1,15 +1,18 @@
 """The simulation manager: orchestrates the food -> walk -> mate cycle.
 
-A run is a sequence of cycles.  Each cycle: scatter fresh food, give every
-creature a full energy budget, run the walk phase (every creature moves once per
-tick, paying a move cost and eating what it touches; it dies if energy runs out),
-then clear the food and let the survivors mate into the next generation.
+A run is a sequence of cycles.  Each cycle: scatter fresh food, refresh the
+creatures' energy (a fresh ``starting_energy`` each cycle, or -- with
+``energy.carryover_energy`` -- survivors keep last cycle's leftover so fitness
+compounds), run the walk phase (every creature moves once per tick, paying a move
+cost and eating what it touches; it dies if energy runs out), then clear the food
+and let the survivors mate into the next generation.
 
 The whole run is exposed as a generator of :class:`Frame` snapshots (one per
 tick, plus one after each mating), which is the single source of truth: the
-visualizer animates the frames, and :meth:`SimulationManager.run` simply drains
-them headlessly.  Output (a copy of the config and per-cycle ``history.json``)
-lands in a timestamped folder, mirroring the sibling ``evolution_simulator``.
+visualizer animates the frames, ``recording.save_frames`` persists them, and
+:meth:`SimulationManager.run` simply drains them headlessly.  Output (a copy of
+the config, the per-cycle ``history.json``, and the full frame log ``frames.npz``)
+lands in a timestamped folder under ``output_dir``.
 """
 
 from __future__ import annotations
@@ -114,9 +117,17 @@ class SimulationManager:
 
     # ── phases ────────────────────────────────────────────────────────────────
     def _begin_cycle(self) -> None:
-        """Phase 1: give everyone a fresh energy budget and scatter new food."""
+        """Phase 1: refresh the energy budget (unless it carries over) and scatter food.
+
+        By default every creature is given a fresh ``starting_energy`` each cycle.
+        With ``energy.carryover_energy`` the budget is left untouched instead, so
+        survivors keep last cycle's leftover (newborns and founders already hold
+        ``starting_energy`` from creation) and fitness compounds across cycles.
+        """
+        carryover = self.config.energy.carryover_energy
         for creature in self.world.creatures:
-            creature.energy = self.config.seeding.starting_energy
+            if not carryover:
+                creature.energy = self.config.seeding.starting_energy
             creature.alive = True
             creature.food_eaten = 0
             creature.energy_gained = 0.0

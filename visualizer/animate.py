@@ -15,13 +15,14 @@ in file size.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from rgb_evo_view.simulation import Frame, SimulationManager
+from rgb_evo_view.simulation import Frame
 
 from .stats import draw_mean_rgb
 
@@ -74,18 +75,28 @@ def _chart_image(history: list[dict]) -> Image.Image:
 
 
 def animate(
-    manager: SimulationManager,
+    frames: Iterable[Frame],
+    history: list[dict],
     save_path: str | Path,
+    *,
+    world_size: tuple[float, float],
+    steps_per_cycle: int,
+    num_cycles: int,
     fps: int = 10,
     max_frames: int = 400,
     cycle_end_seconds: float = 2.0,
     mate_seconds: float = 1.0,
     final_chart_seconds: float = 9.0,
 ) -> None:
-    """Render ``manager``'s run to an animated GIF at ``save_path``.
+    """Render a ``Frame`` stream to an animated GIF at ``save_path``.
 
-    ``manager.setup()`` must already have been called.  There is no live windowed
-    mode yet (a pygame viewer is planned); for now this only exports a GIF.
+    ``frames`` is any iterable of :class:`Frame` -- the live
+    ``SimulationManager.frames()`` generator during a run, or a stream replayed
+    from a saved ``frames.npz`` (see :mod:`rgb_evo_view.recording`).  ``history``
+    is the per-cycle stats that feed the closing chart, and ``world_size`` /
+    ``steps_per_cycle`` / ``num_cycles`` describe the run's geometry and length.
+    There is no live windowed mode yet (a pygame viewer is planned); for now this
+    only exports a GIF.
 
     Walk ticks are subsampled down to roughly ``max_frames`` rendered frames so a
     long run still produces a small, watchable file, but the last walk frame of
@@ -103,15 +114,16 @@ def animate(
     mate_hold_ms = int(round(mate_seconds * 1000))
     chart_hold_ms = int(round(final_chart_seconds * 1000))
 
-    last_tick = manager.config.steps_per_cycle - 1
-    total_ticks = manager.config.num_cycles * (manager.config.steps_per_cycle + 1)
+    width, height = world_size
+    last_tick = steps_per_cycle - 1
+    total_ticks = num_cycles * (steps_per_cycle + 1)
     stride = max(1, -(-total_ticks // max_frames))  # ceil division
 
     fig, ax = plt.subplots(figsize=_FIG_SIZE, dpi=_DPI)
     fig.patch.set_facecolor("black")
     ax.set_facecolor("black")
-    ax.set_xlim(0, manager.world.width)
-    ax.set_ylim(0, manager.world.height)
+    ax.set_xlim(0, width)
+    ax.set_ylim(0, height)
     ax.set_xticks([])
     ax.set_yticks([])
 
@@ -121,7 +133,7 @@ def animate(
 
     images: list[Image.Image] = []
     durations: list[int] = []
-    for i, frame in enumerate(manager.frames()):
+    for i, frame in enumerate(frames):
         # The last walk tick of a cycle is the "who survived" view; the mate frame
         # is the newborns before next cycle's food lands.  Always keep both and
         # hold them; subsample the ordinary walk frames in between.
@@ -145,8 +157,8 @@ def animate(
             durations.append(base_ms)
     plt.close(fig)
 
-    if manager.history:
-        images.append(_chart_image(manager.history))
+    if history:
+        images.append(_chart_image(history))
         durations.append(chart_hold_ms)
 
     if not images:
