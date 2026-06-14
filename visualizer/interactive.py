@@ -76,12 +76,127 @@ def _garden_panel_style(is_open: bool) -> dict:
         "zIndex": 18,
         "backgroundColor": _PANEL_BG,
         "borderLeft": "1px solid #2a2a33",
+        "borderTopLeftRadius": "16px",
+        "borderBottomLeftRadius": "16px",
         "boxShadow": "-8px 0 24px rgba(0,0,0,0.4)",
         "display": "flex",
         "flexDirection": "column",
         "transition": "transform 0.28s ease",
         "transform": "translateX(0)" if is_open else f"translateX({_GARDEN_WIDTH + 12}px)",
     }
+
+
+def _garden_toggle_style(visible: bool) -> dict:
+    """The Garden button under the view switcher; hidden off the replay tab."""
+    return {
+        "position": "absolute",
+        "top": "52px",
+        "right": "14px",
+        "zIndex": 22,
+        "display": "block" if visible else "none",
+        "border": "1px solid #2a2a33",
+        "borderRadius": "8px",
+        "padding": "5px 12px",
+        "fontSize": "13px",
+        "cursor": "pointer",
+        "backgroundColor": _PANEL_BG,
+        "color": _FONT,
+    }
+
+
+_INFO_WIDTH = 380
+
+
+def _info_panel_style(is_open: bool) -> dict:
+    """Slide-out explainer panel: parked off the left edge until opened.
+
+    Mirrors the garden's right-hand panel so the world stays visible alongside
+    it -- you can read the explainer while the sim plays.
+    """
+    return {
+        "position": "absolute",
+        "top": "12px",
+        "left": 0,
+        # No fixed height: the panel sizes to its text and stops there rather
+        # than running the full height over the controls.  Cap it at the
+        # viewport and let it scroll if the text is ever taller.
+        "maxHeight": "calc(100vh - 24px)",
+        "width": f"{_INFO_WIDTH}px",
+        "zIndex": 18,
+        "backgroundColor": _PANEL_BG,
+        "borderRight": "1px solid #2a2a33",
+        "borderTop": "1px solid #2a2a33",
+        "borderBottom": "1px solid #2a2a33",
+        "borderTopRightRadius": "16px",
+        "borderBottomRightRadius": "16px",
+        "boxShadow": "8px 0 24px rgba(0,0,0,0.4)",
+        "display": "flex",
+        "flexDirection": "column",
+        "overflowY": "auto",
+        "transition": "transform 0.28s ease",
+        "transform": "translateX(0)" if is_open else f"translateX(-{_INFO_WIDTH + 12}px)",
+    }
+
+
+# The explainer shown by the top-left info button -- the README's core idea,
+# rewritten for someone who just opened the page with no background.
+_INFO_PARAGRAPHS = [
+    "This is a tiny world where every **dot is a living creature**, and each "
+    "creature's **color is its entire genetic code**. There is no hidden DNA -- "
+    "what you see painted on the dot is the whole inherited identity.",
+    "Time runs in rounds called **cycles**, each with three steps: colored "
+    "**food** is scattered, every creature **wanders and eats**, then the "
+    "survivors **pair up and have offspring**.",
+    "A creature only draws energy from food **close to its own color** -- a red "
+    "creature feasts on red food but starves on blue. Moving costs energy too, "
+    "so a creature that can't find matching food runs out and **dies**.",
+    "Each child's color is the **average of its two parents**. So generation by "
+    "generation the whole population's palette **drifts toward whatever color "
+    "the world is rewarding**. That slow color shift _is_ natural selection -- "
+    "you are watching evolution happen as a change in hue.",
+    "On the map, **squares are food** and **circles are creatures**. Scrub the "
+    "sliders or hit **Play** to move through time, open **Summary** to chart how "
+    "the average color changed, or **Garden** to see the population drawn as "
+    "flowers.",
+]
+
+
+def _info_panel(is_open: bool = False) -> html.Div:
+    """The slide-out explainer: a title header over the scrollable text."""
+    return html.Div(
+        id="info-panel",
+        style=_info_panel_style(is_open),
+        children=[
+            html.H2(
+                "What am I looking at?",
+                # Top padding clears the floating "i" toggle; left padding matches
+                # the body so the title and text share a left edge.
+                style={
+                    "flex": "0 0 auto",
+                    "margin": 0,
+                    "padding": "44px 18px 10px",
+                    "color": _FONT,
+                    "fontSize": "23px",
+                    "fontWeight": 600,
+                },
+            ),
+            html.Div(
+                style={"flex": "0 0 auto", "padding": "0 18px 18px"},
+                children=[
+                    dcc.Markdown(
+                        text,
+                        style={
+                            "fontSize": "14px",
+                            "lineHeight": "1.55",
+                            "color": _FONT,
+                            "margin": "0 0 12px",
+                        },
+                    )
+                    for text in _INFO_PARAGRAPHS
+                ],
+            ),
+        ],
+    )
 
 
 def _view_btn_style(active: bool) -> dict:
@@ -476,6 +591,30 @@ def make_app(run: LoadedRun) -> Dash:
         children=[_summary_panel(run)],
     )
 
+    # A small "info" button floating in the top-left; opens the explainer modal.
+    info_button = html.Button(
+        "i",
+        id="info-toggle",
+        n_clicks=0,
+        title="What is this?",
+        style={
+            "position": "absolute",
+            "top": "10px",
+            "left": "14px",
+            "zIndex": 20,
+            "width": "30px",
+            "height": "30px",
+            "borderRadius": "50%",
+            "border": "1px solid #2a2a33",
+            "backgroundColor": _PANEL_BG,
+            "color": _FONT,
+            "fontSize": "15px",
+            "fontStyle": "italic",
+            "fontFamily": "Georgia, serif",
+            "cursor": "pointer",
+        },
+    )
+
     # A small segmented control floating in the top-right, over the dark field --
     # no full-width tab bar to cut a grey band against the plot.
     view_switch = html.Div(
@@ -504,19 +643,7 @@ def make_app(run: LoadedRun) -> Dash:
         "Garden",
         id="garden-toggle",
         n_clicks=0,
-        style={
-            "position": "absolute",
-            "top": "52px",
-            "right": "14px",
-            "zIndex": 22,
-            "border": "1px solid #2a2a33",
-            "borderRadius": "8px",
-            "padding": "5px 12px",
-            "fontSize": "13px",
-            "cursor": "pointer",
-            "backgroundColor": _PANEL_BG,
-            "color": _FONT,
-        },
+        style=_garden_toggle_style(True),
     )
     garden_panel = html.Div(
         id="garden-panel",
@@ -576,6 +703,9 @@ def make_app(run: LoadedRun) -> Dash:
         },
         children=[
             dcc.Store(id="garden-open", data=False),
+            dcc.Store(id="info-open", data=False),
+            info_button,
+            _info_panel(),
             view_switch,
             garden_toggle,
             garden_panel,
@@ -589,19 +719,28 @@ def make_app(run: LoadedRun) -> Dash:
         Output("summary-view", "style"),
         Output("btn-replay", "style"),
         Output("btn-summary", "style"),
+        Output("garden-toggle", "style"),
+        Output("garden-panel", "style", allow_duplicate=True),
+        Output("garden-open", "data", allow_duplicate=True),
         Input("btn-replay", "n_clicks"),
         Input("btn-summary", "n_clicks"),
+        prevent_initial_call=True,
     )
-    def _switch_view(_r: int, _s: int) -> tuple[dict, dict, dict, dict]:
+    def _switch_view(_r: int, _s: int) -> tuple[dict, dict, dict, dict, dict, dict, bool]:
         on_summary = ctx.triggered_id == "btn-summary"
         base = {"flex": "1 1 auto", "minHeight": 0, "flexDirection": "column"}
         shown, hidden = {**base, "display": "flex"}, {**base, "display": "none"}
         replay_style, summary_style = (hidden, shown) if on_summary else (shown, hidden)
+        # The garden is a replay-only panel; hide its toggle on Summary and force
+        # it closed so it can't linger over the charts.
         return (
             replay_style,
             summary_style,
             _view_btn_style(not on_summary),
             _view_btn_style(on_summary),
+            _garden_toggle_style(not on_summary),
+            _garden_panel_style(False),
+            False,
         )
 
     @app.callback(
@@ -656,6 +795,17 @@ def make_app(run: LoadedRun) -> Dash:
         pos = (int(cycle) * ticks_per_cycle + int(tick) + stride) % total
         new_cycle, new_tick = divmod(pos, ticks_per_cycle)
         return new_cycle, new_tick
+
+    @app.callback(
+        Output("info-panel", "style"),
+        Output("info-open", "data"),
+        Input("info-toggle", "n_clicks"),
+        State("info-open", "data"),
+        prevent_initial_call=True,
+    )
+    def _toggle_info(_n: int, is_open: bool) -> tuple[dict, bool]:
+        now_open = not is_open
+        return _info_panel_style(now_open), now_open
 
     @app.callback(
         Output("garden-panel", "style"),

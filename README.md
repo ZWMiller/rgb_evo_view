@@ -67,9 +67,10 @@ poetry run python runner.py --headless      # no window; just write history + a 
 poetry run python runner.py my_config.toml --gif out.gif --cycles 200 --seed 7
 ```
 
-A run must choose a mode: `--gif` or `--headless`. A live windowed viewer is
-planned (in pygame) but not implemented yet, so a bare `python runner.py` exits
-with a pointer to those flags.
+A run must choose a mode: `--gif` or `--headless`; a bare `python runner.py`
+exits with a pointer to those flags. There's no live windowed viewer — to poke
+at a finished run interactively, use the browser viewer described in
+[Explore a run in your browser](#explore-a-run-in-your-browser).
 
 Each run writes a timestamped folder under `runs/` containing a copy of the
 config, a per-cycle `history.json`, a `history.png` summary plot, and `frames.npz`
@@ -87,6 +88,40 @@ poetry run python build_animation.py runs/<timestamp> --fps 15 --max-frames 800
 ```
 
 Rebuilt GIFs are written under `run_animations/`.
+
+## Explore a run in your browser
+
+A GIF is a fixed recording. For a closer look, any finished run can be opened in
+an interactive web viewer that **replays the frames the run already saved** — no
+re-simulation. Point it at a run folder, or leave it off to grab the most recent:
+
+```bash
+poetry run python -m visualizer.interactive               # newest run under runs/
+poetry run python -m visualizer.interactive runs/<timestamp> --port 8060
+```
+
+Then open the address it prints in your browser.
+
+**Replay the world.** Scrub through the run with the cycle and tick sliders, or
+press Play to watch it unfold. Squares are food, circles are creatures, and every
+dot is painted with its own genome. New to it? The "i" in the top-left pops open a
+plain-language explainer of what you're looking at.
+
+![The interactive viewer replaying the world: colored food squares and creature dots, with cycle and tick sliders along the bottom](docs/rgb_evo_viewer_screen1.png)
+
+**See the population as a garden.** A slide-out panel draws a sample of the living
+creatures as ASCII flowers, each tinted by its genome — another way to feel the
+palette shift as selection runs, and to spot when the population has converged on
+a color.
+
+![The viewer with the flower-garden panel open, showing a grid of ASCII tulips tinted by the population's colors](docs/rgb_evo_viewer_screen2.png)
+
+**Read the whole run at a glance.** The Summary tab charts how the population's
+mean red, green, and blue drifted across every cycle — alongside survivors and
+deaths — with swatches of the starting and final mean color so you can see at a
+glance where evolution took the palette.
+
+![The viewer's Summary tab: line charts of mean R/G/B over cycles plus population and deaths, with start and final color swatches](docs/rgb_evo_viewer_screen3.png)
 
 ## Configuration
 
