@@ -7,27 +7,48 @@
  |_|  \_\\_____|____/  |______\_/ \___/|_|\__,_|\__|_|\___/|_| |_|\/   |_|\___| \_/\_/ \___|_|
 ```
 
-A teaching-oriented visualizer for natural selection, where **a creature's color
-is its genome**. Each creature is a dot whose genetics are its RGB value, so you
-watch evolution happen directly: a screen of randomly-colored dots is reshaped,
-cycle by cycle, into whatever color the environment rewards.
+A sandbox for **watching natural selection happen, in color**. `rgb_evo_view` is a
+teaching-oriented evolution simulator in which **a creature's color *is* its
+genome** — each creature is a dot whose entire heritable identity is one RGB value.
+That makes selection something you *see* rather than read off a chart: a population
+reorganizes its palette, generation by generation, in response to its environment.
 
-Each cycle has three phases:
+You set up the world and the selection pressure — what food exists, how a creature's
+color maps to the energy it can extract, how creatures move, and how they pair and
+breed — then watch the population adapt over a series of cycles. The tool is the
+point: change the rules and you get a different evolutionary story to watch unfold.
 
-1. **Food** — colored food resources are scattered across the world (static).
-2. **Walk** — creatures wander for a fixed number of ticks, spending one energy
-   per tick. Bumping into food yields energy *proportional to how well the
-   creature's color matches the food's color*. Run out of energy and you die.
-3. **Mate** — the survivors pair with their nearest neighbor and produce
-   offspring whose color is the average of the parents'.
+## See it run
 
-The bundled demo seeds **random** creatures against **purple `(1,0,1)`** food, so
-selection recolors the population toward purple over the run's cycles. By default
-surviving parents *carry their leftover energy* into the next cycle, so fitness
-compounds and off-target pigment (the green channel here) is driven down harder.
+Below is one configuration. Every dot is a creature painted with its own genome and
+every small square is a food item. The founders start as a random spray of colors,
+but only creatures whose color is a good match for the food can pull enough energy
+from it to survive and reproduce — so each cycle the cloud shifts toward the colors
+the environment rewards. The closing panel traces the population's mean R/G/B over
+the whole run.
 
-See [`implementation_plan.md`](implementation_plan.md) for the full design,
-including the four energy-overlap models and the population-dynamics trade-offs.
+![A population of randomly-colored dots converging toward the food's color over cycles](docs/demo.gif)
+
+This is the bundled demo ([`simulation_configs/default.toml`](simulation_configs/default.toml));
+it's just one point in the configuration space, included to show the tool in motion.
+
+## How a cycle works
+
+Each cycle has three phases, repeated for the length of the run:
+
+1. **Food** — colored food resources are scattered across the world (static for the
+   cycle).
+2. **Walk** — creatures wander for a fixed number of ticks, spending one energy per
+   tick. Bumping into food yields energy *proportional to how well the creature's
+   color matches the food's color*. Run out of energy and you die.
+3. **Mate** — the survivors pair with their nearest neighbor and produce offspring
+   whose color is the average of the parents' (plus optional mutation).
+
+What "matches" means, how harshly a mismatch is punished, how creatures move, how
+they pair, and whether energy carries across cycles are all knobs — see
+[Configuration](#configuration). See [`implementation_plan.md`](implementation_plan.md)
+for the full design, including the four energy-overlap models and the
+population-dynamics trade-offs.
 
 ---
 
@@ -71,9 +92,17 @@ Rebuilt GIFs are written under `run_animations/`.
 
 A run is fully described by one TOML file; copy and edit
 [`simulation_configs/default.toml`](simulation_configs/default.toml), which is
-heavily commented. Key knobs: the energy-overlap `model` (how color match maps to
-energy), the locomotion `walk_mode`, the founding population, the food color/mode,
-and the mating rules.
+heavily commented. The knobs are where the different evolutionary scenarios live:
+
+- **Food** — the colors, distribution, and energy value of what's on offer. This
+  *is* the environment; it defines what the population is selected toward.
+- **Energy overlap model** — how a color match maps to extractable energy (four
+  models, from a forgiving projection to one that punishes any off-target pigment),
+  plus a `gamma` that sharpens or softens selection.
+- **Locomotion** — how creatures move (`brownian`, `inertial`).
+- **Founding population & mating** — starting colors, how partners pair, mutation.
+- **Energy** — per-cycle budget, movement cost, and whether survivors carry energy
+  forward (see below).
 
 > **Tuning note:** keep `starting_energy` *below* `steps_per_cycle` — otherwise no
 > creature ever starves, selection switches off, and (with `parents_survive`) the

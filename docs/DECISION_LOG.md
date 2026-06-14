@@ -8,6 +8,15 @@ only decisions about the system itself.
 
 ## 2026-06-14
 
+- **Floor settled at 0.20 (not 0.10) for teaching legibility.** 0.10 reaches a deeper, truer
+  purple, but its cycle-0 die-off is so harsh that essentially only already-purple founders
+  survive the first cycle — the population *snaps* rather than visibly drifting, which defeats
+  the "watch selection recolor the dots" purpose of the demo. Raised back to 0.20: the cycle-0
+  trough is gentle enough (~34 vs ~17 founders) that a spread of colors survives and the palette
+  recolors gradually over the run, while carryover still drives green down in the tail. The
+  deeper-purple 0.10 remains a documented option for anyone optimizing for the end state over the
+  journey. (This supersedes the 0.10 default below for the bundled demo.)
+
 - **Default `min_overlap` floor lowered 0.25 → 0.10 now that carryover carries the run.** A
   floor sweep (6 values × 4 seeds, 80 cycles, carryover on) showed the population *never went
   extinct* even at a zero floor — carryover, not the floor, is what keeps the run alive. With
