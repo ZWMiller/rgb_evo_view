@@ -22,7 +22,8 @@ from __future__ import annotations
 import argparse
 
 import plotly.graph_objects as go
-from dash import Dash, Input, Output, State, dcc, html
+from dash import Dash, Input, Output, State, ctx, dcc, html
+from plotly.subplots import make_subplots
 
 from rgb_evo_view.run_loader import LoadedRun, load_run
 from rgb_evo_view.simulation import Frame
@@ -53,6 +54,35 @@ _DEFAULT_SPEED = "1×"
 _SURVIVORS_HOLD_MS = 2000
 _MATE_HOLD_MS = 1000
 
+_ACCENT = "#7b5cff"
+
+
+def _view_btn_style(active: bool) -> dict:
+    """Segmented-control button: filled accent when active, quiet otherwise."""
+    return {
+        "border": "none",
+        "borderRadius": "6px",
+        "padding": "5px 16px",
+        "fontSize": "13px",
+        "cursor": "pointer",
+        "backgroundColor": _ACCENT if active else "transparent",
+        "color": "white" if active else _MUTED,
+    }
+
+
+def _color_swatch(hex_color: str, size: int = 18) -> html.Div:
+    """A small rounded color chip."""
+    return html.Div(
+        style={
+            "width": f"{size}px",
+            "height": f"{size}px",
+            "borderRadius": "4px",
+            "backgroundColor": hex_color,
+            "border": "1px solid #444",
+            "flex": "0 0 auto",
+        }
+    )
+
 
 def _frame_title(frame: Frame) -> str:
     if frame.population:
@@ -61,6 +91,15 @@ def _frame_title(frame: Frame) -> str:
     else:
         mean = "mean RGB (—)"
     return f"cycle {frame.cycle}  ·  {frame.phase}  ·  pop {frame.population}  ·  {mean}"
+
+
+def _world_header(frame: Frame) -> list:
+    """The playback title line plus a swatch of the current mean color."""
+    children: list = [html.Span(_frame_title(frame))]
+    if frame.population:
+        mean_hex = colors_to_hex([frame.creature_colors.mean(axis=0)])[0]
+        children.append(_color_swatch(mean_hex))
+    return children
 
 
 def world_figure(frame: Frame, world_size: tuple[float, float]) -> go.Figure:
@@ -107,17 +146,148 @@ def world_figure(frame: Frame, world_size: tuple[float, float]) -> go.Figure:
     }
     fig.update_layout(
         autosize=True,
-        margin={"l": 8, "r": 8, "t": 36, "b": 8},
+        margin={"l": 8, "r": 8, "t": 8, "b": 8},
         paper_bgcolor=_FIELD_BG,
         plot_bgcolor=_FIELD_BG,
         font={"color": _FONT},
         showlegend=False,
-        title={"text": _frame_title(frame), "x": 0.5, "xanchor": "center"},
         xaxis={**axis, "range": [0, width]},
         # Equal-axis scaling: y units match x so the world isn't stretched.
         yaxis={**axis, "range": [0, height], "scaleanchor": "x", "scaleratio": 1},
     )
     return fig
+
+
+# Channel-line colors for the drift chart: legible reds/greens/blues on dark.
+_CHANNEL_COLORS = {"R": "#ff6b6b", "G": "#51cf66", "B": "#4dabf7"}
+_GRID = "#22222a"
+
+
+def summary_figure(history: list[dict]) -> go.Figure:
+    """The run's drift chart: mean R/G/B per cycle, plus population & deaths.
+
+    A Plotly reimplementation of :func:`visualizer.stats.plot_history` for the
+    Summary tab (the static version stays matplotlib for the PNG/GIF).
+    """
+    fig = make_subplots(
+        rows=2,
+        cols=1,
+        shared_xaxes=True,
+        vertical_spacing=0.1,
+        row_heights=[0.62, 0.38],
+        subplot_titles=("Population mean color over time", "Population & deaths"),
+    )
+
+    # Shift cycle indices by +1 so the founding row (stored as cycle -1, the
+    # initial population before any selection) reads as the 0th / starting cycle
+    # rather than "-1".  Keeps the founding point on the line; the axis stays
+    # "cycle" (it's cycles, not generations -- parents persist across cycles).
+    cycles = [h["cycle"] + 1 for h in history]
+    channels = list(zip(*[h["mean_rgb"] for h in history], strict=True))
+    for values, name in zip(channels, ("R", "G", "B"), strict=True):
+        fig.add_trace(
+            go.Scatter(
+                x=cycles, y=values, mode="lines", name=name, line={"color": _CHANNEL_COLORS[name], "width": 2}
+            ),
+            row=1,
+            col=1,
+        )
+    fig.add_trace(
+        go.Scatter(
+            x=cycles,
+            y=[h["survivors"] for h in history],
+            mode="lines",
+            name="survivors",
+            line={"color": _FONT, "width": 2},
+        ),
+        row=2,
+        col=1,
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=cycles,
+            y=[h["deaths"] for h in history],
+            mode="lines",
+            name="deaths",
+            line={"color": _MUTED, "width": 2, "dash": "dash"},
+        ),
+        row=2,
+        col=1,
+    )
+
+    fig.update_yaxes(range=[0, 1], title_text="mean channel", row=1, col=1)
+    fig.update_yaxes(title_text="creatures", row=2, col=1)
+    fig.update_xaxes(title_text="cycle", row=2, col=1)
+    fig.update_xaxes(gridcolor=_GRID, zeroline=False)
+    fig.update_yaxes(gridcolor=_GRID, zeroline=False)
+    fig.update_annotations(font={"color": _FONT, "size": 14})  # subplot titles
+    fig.update_layout(
+        autosize=True,
+        paper_bgcolor=_FIELD_BG,
+        plot_bgcolor=_FIELD_BG,
+        font={"color": _FONT},
+        margin={"l": 56, "r": 24, "t": 36, "b": 40},
+        legend={"orientation": "h", "y": 1.08, "x": 1, "xanchor": "right"},
+    )
+    return fig
+
+
+def _stat(label: str, value: str) -> html.Div:
+    return html.Div(
+        style={"textAlign": "center"},
+        children=[
+            html.Div(value, style={"fontSize": "20px", "color": _FONT}),
+            html.Div(label, style={"fontSize": "11px", "color": _MUTED, "letterSpacing": "0.04em"}),
+        ],
+    )
+
+
+def _summary_panel(run: LoadedRun) -> html.Div:
+    """The Summary tab: a stats strip over the drift chart."""
+    history = run.history
+    if not history:
+        return html.Div("No history recorded for this run.", style={"padding": "24px", "color": _MUTED})
+
+    founding, last = history[0], history[-1]
+    start_hex = colors_to_hex([founding["mean_rgb"]])[0]
+    final_hex = colors_to_hex([last["mean_rgb"]])[0]
+
+    def _color_stat(label: str, hex_color: str) -> html.Div:
+        return html.Div(
+            style={"display": "flex", "alignItems": "center", "gap": "10px"},
+            children=[_color_swatch(hex_color, size=26), _stat(label, hex_color)],
+        )
+
+    stats = html.Div(
+        style={
+            "flex": "0 0 auto",
+            "display": "flex",
+            "justifyContent": "center",
+            "gap": "40px",
+            "alignItems": "center",
+            "padding": "14px",
+        },
+        children=[
+            _stat("cycles", str(run.num_cycles)),
+            _stat("founding pop", str(founding["survivors"])),
+            _stat("final pop", str(last["survivors"])),
+            _color_stat("starting mean color", start_hex),
+            _color_stat("final mean color", final_hex),
+        ],
+    )
+
+    return html.Div(
+        style={"display": "flex", "flexDirection": "column", "height": "100%"},
+        children=[
+            stats,
+            dcc.Graph(
+                id="summary-chart",
+                figure=summary_figure(history),
+                config={"responsive": True, "displayModeBar": False},
+                style={"flex": "1 1 auto", "minHeight": 0},
+            ),
+        ],
+    )
 
 
 def _legend_bar() -> html.Div:
@@ -241,15 +411,27 @@ def make_app(run: LoadedRun) -> Dash:
     ticks_per_cycle = run.steps_per_cycle + 1  # walk ticks 0..steps-1 plus the mate frame
     total = len(run.frames)
 
-    app.layout = html.Div(
-        style={
-            "height": "100vh",
-            "margin": 0,
-            "display": "flex",
-            "flexDirection": "column",
-            "backgroundColor": _FIELD_BG,
-        },
+    # Both views stay mounted; the view switcher toggles their display.  That
+    # keeps the replay components (and their playback state) alive while on
+    # Summary, rather than tearing them down and resetting on every switch.
+    replay_view = html.Div(
+        id="replay-view",
+        style={"flex": "1 1 auto", "minHeight": 0, "display": "flex", "flexDirection": "column"},
         children=[
+            html.Div(
+                id="world-title",
+                style={
+                    "flex": "0 0 auto",
+                    "display": "flex",
+                    "justifyContent": "center",
+                    "alignItems": "center",
+                    "gap": "10px",
+                    "padding": "8px",
+                    "fontSize": "18px",
+                    "color": _FONT,
+                },
+                children=_world_header(run.frames[0]),
+            ),
             dcc.Graph(
                 id="world",
                 figure=world_figure(run.frames[0], run.world_size),
@@ -260,15 +442,74 @@ def make_app(run: LoadedRun) -> Dash:
             _controls(run),
         ],
     )
+    summary_view = html.Div(
+        id="summary-view",
+        style={"flex": "1 1 auto", "minHeight": 0, "display": "none", "flexDirection": "column"},
+        children=[_summary_panel(run)],
+    )
+
+    # A small segmented control floating in the top-right, over the dark field --
+    # no full-width tab bar to cut a grey band against the plot.
+    view_switch = html.Div(
+        style={
+            "position": "absolute",
+            "top": "10px",
+            "right": "14px",
+            "zIndex": 20,
+            "display": "flex",
+            "gap": "2px",
+            "padding": "3px",
+            "borderRadius": "9px",
+            "backgroundColor": _PANEL_BG,
+            "border": "1px solid #2a2a33",
+        },
+        children=[
+            html.Button("Replay", id="btn-replay", n_clicks=0, style=_view_btn_style(True)),
+            html.Button("Summary", id="btn-summary", n_clicks=0, style=_view_btn_style(False)),
+        ],
+    )
+
+    app.layout = html.Div(
+        style={
+            "position": "relative",
+            "height": "100vh",
+            "margin": 0,
+            "display": "flex",
+            "flexDirection": "column",
+            "backgroundColor": _FIELD_BG,
+        },
+        children=[view_switch, replay_view, summary_view],
+    )
+
+    @app.callback(
+        Output("replay-view", "style"),
+        Output("summary-view", "style"),
+        Output("btn-replay", "style"),
+        Output("btn-summary", "style"),
+        Input("btn-replay", "n_clicks"),
+        Input("btn-summary", "n_clicks"),
+    )
+    def _switch_view(_r: int, _s: int) -> tuple[dict, dict, dict, dict]:
+        on_summary = ctx.triggered_id == "btn-summary"
+        base = {"flex": "1 1 auto", "minHeight": 0, "flexDirection": "column"}
+        shown, hidden = {**base, "display": "flex"}, {**base, "display": "none"}
+        replay_style, summary_style = (hidden, shown) if on_summary else (shown, hidden)
+        return (
+            replay_style,
+            summary_style,
+            _view_btn_style(not on_summary),
+            _view_btn_style(on_summary),
+        )
 
     @app.callback(
         Output("world", "figure"),
+        Output("world-title", "children"),
         Input("cycle-slider", "value"),
         Input("tick-slider", "value"),
     )
-    def _render(cycle: int, tick: int) -> go.Figure:
-        idx = frame_index.index_of(int(cycle), int(tick))
-        return world_figure(run.frames[idx], run.world_size)
+    def _render(cycle: int, tick: int) -> tuple[go.Figure, list]:
+        frame = run.frames[frame_index.index_of(int(cycle), int(tick))]
+        return world_figure(frame, run.world_size), _world_header(frame)
 
     @app.callback(
         Output("tick-timer", "disabled"),
