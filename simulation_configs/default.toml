@@ -8,9 +8,9 @@
 # Copy and edit this file, then:  python runner.py my_config.toml
 
 [simulation]
-num_cycles      = 20      # how many food -> walk -> mate cycles to run; the drift to
-                          # orchid happens over ~10 cycles, so 20 captures it plus a
-                          # settled tail without padding the GIF with static frames
+num_cycles      = 20      # how many food -> walk -> mate cycles to run; the visible
+                          # drift toward purple happens over ~10 cycles, so 20 captures
+                          # it plus a settled tail without padding the GIF
 steps_per_cycle = 100     # ticks in the walk phase; each tick costs move_cost energy
 seed            = 42      # omit for a fresh random run each time
 output_dir      = "runs"  # outputs go to runs/<timestamp>/
@@ -52,12 +52,14 @@ move_cost     = 1.0         # energy spent per tick
 # poorly-matched creatures scavenge a little from any food, softening the early
 # die-off so the palette drifts gradually over many cycles instead of snapping in
 # one. With carryover_energy on (below), the floor mainly sets how deep the cycle-0
-# bottleneck goes: higher = shallower trough but weaker tail selection (lighter
-# "orchid"); lower = deeper trough but a truer, deeper purple. 0.10 is the tuned
-# balance -- a safe trough that still recovers, with strong selection in the tail.
+# bottleneck goes: higher = shallower trough so founders visibly survive and drift
+# (better for teaching); lower = deeper trough but a truer, deeper purple. 0.20 keeps
+# the cycle-0 die-off gentle enough to watch the population recolor gradually, while
+# carryover still drives green down in the tail. (0.10 reaches a deeper purple but
+# wipes all but near-purple founders in cycle 0 -- technically better, harder to read.)
 # Carryover keeps the run off extinction even at a zero floor, but keep this modest:
 # too high and nobody starves and selection switches off entirely.
-min_overlap   = 0.10
+min_overlap   = 0.20
 # Carry surviving parents' leftover energy into the next cycle instead of resetting
 # everyone to starting_energy each cycle. Fitness then compounds: a creature that
 # only just scraped through starts the next cycle near empty and is far likelier to
