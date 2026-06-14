@@ -10,9 +10,24 @@ Cross-machine task tracking for active development items.
 
 ## Backlog
 
-- Live windowed (pygame) viewer — currently a run must export `--gif` or run `--headless`.
+(nothing queued)
 
 ## Done
+
+### 2026-06-14 — Interactive web viewer (Dash + Plotly)
+Browser-based replayer of a finished run's `frames.npz` (no re-simulation), a third
+consumer of the one frame stream. Split for testability: `rgb_evo_view/run_loader.py`
+(`load_run`/`latest_run`, with `num_cycles`/`steps_per_cycle` derived from the frames;
+`build_animation.py` now uses it too), `visualizer/interactive_model.py` (Dash-free
+helpers — frame index, `colors_to_hex`, palette sampling, ASCII tulips — unit-tested),
+and `visualizer/interactive.py` (the Dash app). World scatter (food squares, creature
+circles, genome-colored, responsive/equal-aspect) with cycle+tick scrub sliders, Play,
+a speed selector, and end-of-cycle holds mirroring the GIF. A floating Replay/Summary
+switcher (both views stay mounted) where Summary is a Plotly reimplementation of
+`stats.plot_history` plus a stats strip with starting/final mean-color swatches. A
+slide-out flower garden: a 3×3 grid of ASCII tulips whose petals sample the living
+population (Resample redraws; stems are fixed per grid position). Replaced the old
+"live windowed (pygame) viewer" idea, which is dropped. Added `dash`/`plotly` deps.
 
 ### 2026-06-14 — Energy carries over between cycles (stronger selection)
 Added `energy.carryover_energy` (default on): surviving parents keep their leftover
