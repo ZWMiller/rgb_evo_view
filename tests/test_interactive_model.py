@@ -104,17 +104,23 @@ def test_sample_palette_rejects_unknown_method():
 # ── ascii_flowers ─────────────────────────────────────────────────────────────
 
 
-def test_ascii_flowers_headed_by_generation_and_tints_petals():
-    html = ascii_flowers(["#ff0000", "#00ff00"], generation=7)
-    assert "generation 7" in html
-    assert "<pre>" in html
+def test_ascii_flowers_headed_by_cycle_and_tints_petals():
+    html = ascii_flowers(["#ff0000", "#00ff00"], cycle=7)
+    assert "cycle 7" in html
+    assert "<pre" in html
     # Petal color appears in spans.
     assert "color:#ff0000" in html
     # A muted stem green (not the petal color) also appears.
     assert "#2f5d2f" in html or "#3a7a3a" in html or "#4a8a4a" in html
 
 
+def test_ascii_flowers_wraps_into_rows():
+    # 7 colors at 3 per row -> 3 <pre> strips (3 + 3 + 1).
+    html = ascii_flowers([f"#{i:02x}0000" for i in range(7)], cycle=2, per_row=3)
+    assert html.count("<pre") == 3
+
+
 def test_ascii_flowers_empty_palette():
-    html = ascii_flowers([], generation=0)
-    assert "generation 0" in html
+    html = ascii_flowers([], cycle=0)
+    assert "cycle 0" in html
     assert "no living creatures" in html

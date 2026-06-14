@@ -21,13 +21,15 @@ from __future__ import annotations
 
 import argparse
 
+import numpy as np
 import plotly.graph_objects as go
 from dash import Dash, Input, Output, State, ctx, dcc, html
+from dash.exceptions import PreventUpdate
 from plotly.subplots import make_subplots
 
 from rgb_evo_view.run_loader import LoadedRun, load_run
 from rgb_evo_view.simulation import Frame
-from visualizer.interactive_model import build_frame_index, colors_to_hex
+from visualizer.interactive_model import ascii_flowers, build_frame_index, colors_to_hex, sample_palette
 
 # Dark field to match the GIF renderer; markers carry the only real color.
 _FIELD_BG = "#0d0d12"
@@ -55,6 +57,31 @@ _SURVIVORS_HOLD_MS = 2000
 _MATE_HOLD_MS = 1000
 
 _ACCENT = "#7b5cff"
+
+# Flower garden: how many living-creature colors to sample, tiled this many
+# across.  9 colors -> a 3x3 grid of ASCII tulips.
+_GARDEN_SAMPLES = 9
+_GARDEN_PER_ROW = 3
+_GARDEN_WIDTH = 360
+
+
+def _garden_panel_style(is_open: bool) -> dict:
+    """Slide-out garden panel: parked off the right edge until opened."""
+    return {
+        "position": "absolute",
+        "top": "44px",
+        "right": 0,
+        "bottom": 0,
+        "width": f"{_GARDEN_WIDTH}px",
+        "zIndex": 18,
+        "backgroundColor": _PANEL_BG,
+        "borderLeft": "1px solid #2a2a33",
+        "boxShadow": "-8px 0 24px rgba(0,0,0,0.4)",
+        "display": "flex",
+        "flexDirection": "column",
+        "transition": "transform 0.28s ease",
+        "transform": "translateX(0)" if is_open else f"translateX({_GARDEN_WIDTH + 12}px)",
+    }
 
 
 def _view_btn_style(active: bool) -> dict:
@@ -348,7 +375,7 @@ def _controls(run: LoadedRun) -> html.Div:
             html.Div(
                 style={"display": "flex", "alignItems": "center", "gap": "14px", "marginBottom": "4px"},
                 children=[
-                    html.Button("▶ Play", id="play", n_clicks=0, style={"minWidth": "84px"}),
+                    html.Button("Play", id="play", n_clicks=0, style={"minWidth": "84px"}),
                     html.Span("Speed", style={"color": _MUTED, "fontSize": "12px"}),
                     dcc.Dropdown(
                         id="speed",
@@ -410,6 +437,7 @@ def make_app(run: LoadedRun) -> Dash:
     frame_index = build_frame_index(run.frames)
     ticks_per_cycle = run.steps_per_cycle + 1  # walk ticks 0..steps-1 plus the mate frame
     total = len(run.frames)
+    garden_rng = np.random.default_rng()  # unseeded: each draw/resample differs
 
     # Both views stay mounted; the view switcher toggles their display.  That
     # keeps the replay components (and their playback state) alive while on
@@ -469,6 +497,74 @@ def make_app(run: LoadedRun) -> Dash:
         ],
     )
 
+    # The garden toggle floats just under the view switch; the panel slides out
+    # from the right edge beneath it.  The toggle stays above the panel so it
+    # can close it again.
+    garden_toggle = html.Button(
+        "Garden",
+        id="garden-toggle",
+        n_clicks=0,
+        style={
+            "position": "absolute",
+            "top": "52px",
+            "right": "14px",
+            "zIndex": 22,
+            "border": "1px solid #2a2a33",
+            "borderRadius": "8px",
+            "padding": "5px 12px",
+            "fontSize": "13px",
+            "cursor": "pointer",
+            "backgroundColor": _PANEL_BG,
+            "color": _FONT,
+        },
+    )
+    garden_panel = html.Div(
+        id="garden-panel",
+        style=_garden_panel_style(False),
+        children=[
+            html.Div(
+                style={
+                    "flex": "0 0 auto",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "gap": "12px",
+                    "padding": "10px 12px 6px",
+                },
+                children=[
+                    html.Span("Flower garden", style={"color": _FONT, "fontSize": "14px"}),
+                    html.Button(
+                        "Resample",
+                        id="garden-resample",
+                        n_clicks=0,
+                        style={
+                            "border": "none",
+                            "borderRadius": "6px",
+                            "padding": "4px 12px",
+                            "fontSize": "12px",
+                            "cursor": "pointer",
+                            "backgroundColor": _ACCENT,
+                            "color": "white",
+                        },
+                    ),
+                ],
+            ),
+            dcc.Markdown(
+                id="garden-content",
+                dangerously_allow_html=True,
+                style={
+                    "flex": "1 1 auto",
+                    "minHeight": 0,
+                    "overflowY": "auto",
+                    "padding": "0 12px 12px",
+                    "fontFamily": "monospace",
+                    "fontSize": "11px",
+                    "lineHeight": "1.1",
+                    "color": _FONT,
+                },
+            ),
+        ],
+    )
+
     app.layout = html.Div(
         style={
             "position": "relative",
@@ -478,7 +574,14 @@ def make_app(run: LoadedRun) -> Dash:
             "flexDirection": "column",
             "backgroundColor": _FIELD_BG,
         },
-        children=[view_switch, replay_view, summary_view],
+        children=[
+            dcc.Store(id="garden-open", data=False),
+            view_switch,
+            garden_toggle,
+            garden_panel,
+            replay_view,
+            summary_view,
+        ],
     )
 
     @app.callback(
@@ -520,7 +623,7 @@ def make_app(run: LoadedRun) -> Dash:
     )
     def _toggle_play(_n_clicks: int, disabled: bool) -> tuple[bool, str]:
         now_paused = not disabled
-        return now_paused, ("▶ Play" if now_paused else "⏸ Pause")
+        return now_paused, ("Play" if now_paused else "Pause")
 
     last_walk_tick = run.steps_per_cycle - 1  # survivors, just before mating
     mate_tick = run.steps_per_cycle  # newborns, before next cycle's food
@@ -553,6 +656,35 @@ def make_app(run: LoadedRun) -> Dash:
         pos = (int(cycle) * ticks_per_cycle + int(tick) + stride) % total
         new_cycle, new_tick = divmod(pos, ticks_per_cycle)
         return new_cycle, new_tick
+
+    @app.callback(
+        Output("garden-panel", "style"),
+        Output("garden-open", "data"),
+        Input("garden-toggle", "n_clicks"),
+        State("garden-open", "data"),
+        prevent_initial_call=True,
+    )
+    def _toggle_garden(_n: int, is_open: bool) -> tuple[dict, bool]:
+        now_open = not is_open
+        return _garden_panel_style(now_open), now_open
+
+    @app.callback(
+        Output("garden-content", "children"),
+        Input("cycle-slider", "value"),
+        Input("tick-slider", "value"),
+        Input("garden-resample", "n_clicks"),
+        Input("garden-open", "data"),
+        State("garden-open", "data"),
+    )
+    def _garden(cycle: int, tick: int, _resample: int, _open_in: bool, is_open: bool) -> str:
+        # Skip the per-frame redraw while the panel is closed (the common case
+        # during playback); still draw on the initial load, on resample, and
+        # when the panel is opened.
+        if ctx.triggered_id in ("cycle-slider", "tick-slider") and not is_open:
+            raise PreventUpdate
+        frame = run.frames[frame_index.index_of(int(cycle), int(tick))]
+        palette = sample_palette(frame, _GARDEN_SAMPLES, rng=garden_rng)
+        return ascii_flowers(palette, frame.cycle, per_row=_GARDEN_PER_ROW)
 
     return app
 

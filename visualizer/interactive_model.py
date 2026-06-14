@@ -131,8 +131,8 @@ _FLOWER_WIDTH = max(len(line) for line in _FLOWER)
 _BLOOM_ROWS = 6
 
 # A spread of muted greens (dark -> light), nothing neon, so the stems vary a
-# little from one another.  Picked per flower from the petal color so a given
-# color always grows the same stem (stable across runs, no rng needed).
+# little from one another.  Assigned by a flower's position in the garden (not
+# its petal color), so each stem holds its shade while petals resample.
 _STEM_GREENS = (
     "#2f5d2f",
     "#3a7a3a",
@@ -143,21 +143,16 @@ _STEM_GREENS = (
 )
 
 
-def _stem_green(color: str) -> str:
-    """Pick a stem shade deterministically from a petal's ``#rrggbb`` color."""
-    try:
-        seed = int(color[1:], 16)
-    except ValueError:
-        seed = 0
-    return _STEM_GREENS[seed % len(_STEM_GREENS)]
+def _stem_for_position(index: int) -> str:
+    """The fixed stem shade for the flower at grid position ``index``."""
+    return _STEM_GREENS[index % len(_STEM_GREENS)]
 
 
 def _span(ch: str, color: str) -> str:
     return f'<span style="color:{color}">{ch}</span>' if ch != " " else ch
 
 
-def _flower_html(color: str) -> str:
-    stem = _stem_green(color)
+def _flower_html(color: str, stem: str) -> str:
     rows = []
     for r, row in enumerate(_FLOWER):
         tint = color if r < _BLOOM_ROWS else stem
@@ -165,20 +160,29 @@ def _flower_html(color: str) -> str:
     return "\n".join(rows)
 
 
-def ascii_flowers(palette: list[str], generation: int) -> str:
-    """Render one ASCII flower per palette color as an HTML string.
+def _flower_strip(chunk: list[str], start: int) -> str:
+    """One row of flowers, stitched column-wise into a single ``<pre>``.
 
-    Headed by the generation number; flowers laid out side by side in a
-    ``<pre>`` so the per-glyph color spans keep their monospace alignment.
-    Returns plain HTML (no Dash types) so it stays testable; the Dash layer
-    drops it into the page.
+    ``start`` is the grid index of the first flower in the row, so each stem
+    keeps a fixed shade tied to its position rather than its petal color.
     """
-    header = f"<div>generation {generation}</div>"
+    flowers = [_flower_html(c, _stem_for_position(start + i)).split("\n") for i, c in enumerate(chunk)]
+    height = len(_FLOWER)
+    rows = "\n".join("  ".join(flower[r] for flower in flowers) for r in range(height))
+    return f'<pre style="margin:6px 0">{rows}</pre>'
+
+
+def ascii_flowers(palette: list[str], cycle: int, per_row: int = 3) -> str:
+    """Render the palette as a grid of ASCII flowers, as an HTML string.
+
+    Headed by the cycle number; flowers are tiled ``per_row`` across, wrapping
+    into stacked ``<pre>`` rows.  Per-glyph color spans keep their monospace
+    alignment within a row.  Returns plain HTML (no Dash types) so it stays
+    testable; the Dash layer drops it into the page.
+    """
+    header = f'<div style="padding:4px 0">cycle {cycle}</div>'
     if not palette:
         return header + "<pre>(no living creatures)</pre>"
 
-    # Stitch the flowers column-wise: row r of the strip is row r of every flower.
-    flowers = [_flower_html(c).split("\n") for c in palette]
-    height = len(_FLOWER)
-    strip = "\n".join("  ".join(flower[r] for flower in flowers) for r in range(height))
-    return f"{header}<pre>{strip}</pre>"
+    strips = [_flower_strip(palette[i : i + per_row], i) for i in range(0, len(palette), per_row)]
+    return header + "".join(strips)
